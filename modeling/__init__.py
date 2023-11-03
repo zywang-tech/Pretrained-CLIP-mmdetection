@@ -1,2 +1,2 @@
-from .clip_RN import *
-from .clip_ViT import *
+from .Clip_RN import *
+from .Clip_ViT import *
