@@ -127,9 +127,12 @@ class Clip_RN(BaseModule):
         return x
     
     def encode_image(self, image):
-        x = self.forward(image)[-1]
-        x = self.attention_global_pool(x)
-        return x
+        if len(self.out_indices) > 1:
+            x = self.forward(image)[-1]
+            x = self.attention_global_pool(x)
+            return x
+        else:
+            return self.attention_global_pool(self.forward(x[0]))
     
     def tokenize(self, text: list):
         return clip.tokenize(text)
