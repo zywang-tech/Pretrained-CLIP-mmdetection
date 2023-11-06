@@ -30,6 +30,7 @@ class Clip_RN(BaseModule):
         self.set_backbone_model()
         self.visual = self.clip.visual
         self.text = self.clip.transformer
+        self.logit_scale = self.clip.logit_scale
 
         # vision
         self.visual = self.clip.visual
@@ -37,6 +38,7 @@ class Clip_RN(BaseModule):
 
         # text
         self.text = self.clip.transformer
+        self.dtype = float
         self.float()
 
     def set_backbone_model(self):
@@ -129,21 +131,24 @@ class Clip_RN(BaseModule):
         x = self.attention_global_pool(x)
         return x
     
+    def tokenize(self, text: list):
+        return clip.tokenize(text)
+    
     def encode_text(self, text):
-        x = self.clip.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
+        x = self.clip.token_embedding(text) # [batch_size, n_ctx, d_model]
 
-        x = x + self.clip.positional_embedding.type(self.dtype)
+        x = x + self.clip.positional_embedding
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = self.text(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
-        x = self.clip.ln_final(x).type(self.dtype)
+        x = self.clip.ln_final(x)
 
         # x.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.clip.text_projection
         return x
 
-    def clip(self, image, text):
+    def clip_img_text(self, image, text):
         image_features = self.encode_image(image)
         text_features = self.encode_text(text)
 
@@ -159,7 +164,11 @@ class Clip_RN(BaseModule):
         # shape = [global_batch_size, global_batch_size]
         return logits_per_image, logits_per_text
     
+    
 if __name__ == '__main__':
-    clip = Clip_RN(pretrained_name = 'RN50')
-    clip.get_per_layer_out_c
+    clip1 = Clip_RN(pretrained_name = 'RN50')
+    img = torch.randn(size=(1, 3, 224, 224)).cuda().float()
+    text = ['hello']
+    text_ = clip1.tokenize(text)
+    print(clip1.clip_img_text(img, text_.cuda()))
     
