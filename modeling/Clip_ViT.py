@@ -26,6 +26,7 @@ class Clip_ViT(BaseModule):
         self.set_backbone_model()
         self.visual = self.clip.visual
         self.text = self.clip.transformer
+        self.logit_scale = self.clip.logit_scale
 
         # vision
         self.visual = self.clip.visual
@@ -34,7 +35,7 @@ class Clip_ViT(BaseModule):
 
         # text
         self.text = self.clip.transformer
-
+        self.dtype = float
         self.float()
 
     def set_backbone_model(self):
@@ -111,23 +112,32 @@ class Clip_ViT(BaseModule):
         return out_c
     
     def encode_image(self, image):
-        return self.forward(image)
+        if self.return_intermediate:
+            img = self.forward(image)[-1]
+            if self.visual.proj is not None:
+                img = img @ self.visual.proj
+            return img
+        else:
+            return self.forward(image)
+    
+    def tokenize(self, text: list):
+        return clip.tokenize(text)
     
     def encode_text(self, text):
-        x = self.clip.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
+        x = self.clip.token_embedding(text)  # [batch_size, n_ctx, d_model]
 
-        x = x + self.clip.positional_embedding.type(self.dtype)
+        x = x + self.clip.positional_embedding
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = self.text(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
-        x = self.clip.ln_final(x).type(self.dtype)
+        x = self.clip.ln_final(x)
 
         # x.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.clip.text_projection
         return x
 
-    def clip(self, image, text):
+    def clip_img_text(self, image, text):
         image_features = self.encode_image(image)
         text_features = self.encode_text(text)
 
@@ -146,7 +156,9 @@ class Clip_ViT(BaseModule):
 
 
 if __name__ == '__main__':
-    clip = Clip_ViT(pretrained_name = 'ViT-B/16', return_intermediate=True)
-    img = torch.randn(size=(1, 3, 224, 224)).float().cuda()
-    print(clip(img))
+    clip1 = Clip_ViT(pretrained_name = 'ViT-B/16', return_intermediate=True)
+    img = torch.randn(size=(1, 3, 224, 224)).cuda().float()
+    text = ['hello']
+    text_ = clip1.tokenize(text)
+    print(clip1.clip_img_text(img, text_.cuda()))
     
